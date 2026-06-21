@@ -337,16 +337,22 @@ class SystemTtsService : TextToSpeechService(), IEventDispatcher {
             var cfgId: Long? = getConfigIdFromVoiceName(request.voiceName ?: "").onFailure {
                 longToast(R.string.voice_name_bad_format)
                 callback.error(TextToSpeech.ERROR_INVALID_REQUEST)
-                callback.done()
+                // 1. 此处安全保护：防止还未 start 就 done 引起的崩溃
+                try { callback.done() } catch (ignored: Exception) {}
                 return@runBlocking
             }.value
+
             synthesizerJob = mScope.launch {
+                // 2. 引入变量，标记 callback.start() 是否被成功执行过
+                var isStarted = false 
+
                 mTtsManager?.synthesize(
                     params = SystemParams(text = request.charSequenceText.toString()),
                     forceConfigId = cfgId,
                     callback = object :
                         com.github.jing332.tts.synthesizer.SynthesisCallback {
                         override fun onSynthesizeStart(sampleRate: Int) {
+                            isStarted = true // 标记已经 start
                             callback.start(
                                 /* sampleRateInHz = */ sampleRate,
                                 /* audioFormat = */ AudioFormat.ENCODING_PCM_16BIT,
@@ -361,7 +367,17 @@ class SystemTtsService : TextToSpeechService(), IEventDispatcher {
                     }
                 )?.onSuccess {
                     logger.debug { "done" }
-                    callback.done()
+                    // 3. 只有 start 过了，且在 try-catch 保护下才允许调用 done()
+                    if (isStarted) {
+                        try {
+                            callback.done()
+                        } catch (e: Exception) {
+                            logger.error(e) { "callback.done() failed: ${e.message}" }
+                        }
+                    } else {
+                        // 如果未曾开始就结束了，则以 error 形式正常终止，避免崩溃
+                        callback.error(TextToSpeech.ERROR_SYNTHESIS)
+                    }
                 }?.onFailure {
                     when (it) {
                         SynthesisError.ConfigEmpty -> {
