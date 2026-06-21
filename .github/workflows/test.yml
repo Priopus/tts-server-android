@@ -44,20 +44,21 @@ jobs:
           touch local.properties
           if [ -z "${{ secrets.ALIAS_NAME }}" ]; then
             echo "DEBUG: Secrets are empty, generating fallback self-signed JKS keystore..."
-            # 使用 jdk 自带的 keytool 自动生成一个 100% 格式正确的临时 jks 证书
+            # 1. 在云端生成 test.jks
             keytool -genkeypair -alias test -keyalg RSA -keysize 2048 -validity 10000 -keystore $GITHUB_WORKSPACE/key.jks -storepass 123456 -keypass 123456 -dname "CN=Test, O=Test, C=CN"
-            # 兼容不同 module 的路径，将其同时拷贝至根目录与 app 目录下
+            # 2. 复制到 app 目录下，配合 KEY_PATH=key.jks 使用
             cp $GITHUB_WORKSPACE/key.jks $GITHUB_WORKSPACE/app/key.jks
-            echo "ALIAS_NAME='test'" >> local.properties
-            echo "ALIAS_PASSWORD='123456'" >> local.properties
-            echo "KEY_PASSWORD='123456'" >> local.properties
-            echo "KEY_PATH='./key.jks'" >> local.properties
+            # 3. 写入 local.properties（注意：后面绝对不要有任何单引号或双引号）
+            echo "ALIAS_NAME=test" >> local.properties
+            echo "ALIAS_PASSWORD=123456" >> local.properties
+            echo "KEY_PASSWORD=123456" >> local.properties
+            echo "KEY_PATH=key.jks" >> local.properties
           else
             echo "DEBUG: Using repository secrets..."
-            echo ALIAS_NAME='${{ secrets.ALIAS_NAME }}' >> local.properties
-            echo ALIAS_PASSWORD='${{ secrets.ALIAS_PASSWORD }}' >> local.properties
-            echo KEY_PASSWORD='${{ secrets.KEY_PASSWORD }}' >> local.properties
-            echo KEY_PATH='./key.jks' >> local.properties
+            echo "ALIAS_NAME=${{ secrets.ALIAS_NAME }}" >> local.properties
+            echo "ALIAS_PASSWORD=${{ secrets.ALIAS_PASSWORD }}" >> local.properties
+            echo "KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}" >> local.properties
+            echo "KEY_PATH=key.jks" >> local.properties
             echo "${{ secrets.KEY_STORE }}" | base64 --decode > $GITHUB_WORKSPACE/app/key.jks
           fi
 
