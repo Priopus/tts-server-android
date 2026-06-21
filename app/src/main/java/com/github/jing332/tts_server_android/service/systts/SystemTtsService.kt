@@ -311,7 +311,7 @@ class SystemTtsService : TextToSpeechService(), IEventDispatcher {
         return Ok(null)
     }
 
-    override fun onSynthesizeText(
+   override fun onSynthesizeText(
         request: SynthesisRequest,
         callback: android.speech.tts.SynthesisCallback,
     ) {
@@ -337,7 +337,7 @@ class SystemTtsService : TextToSpeechService(), IEventDispatcher {
             var cfgId: Long? = getConfigIdFromVoiceName(request.voiceName ?: "").onFailure {
                 longToast(R.string.voice_name_bad_format)
                 callback.error(TextToSpeech.ERROR_INVALID_REQUEST)
-                // 1. 此处安全保护：防止还未 start 就 done 引起的崩溃
+                // 1. 安全保护：防止还未 start 就 done 引起的崩溃
                 try { callback.done() } catch (ignored: Exception) {}
                 return@runBlocking
             }.value
@@ -372,10 +372,11 @@ class SystemTtsService : TextToSpeechService(), IEventDispatcher {
                         try {
                             callback.done()
                         } catch (e: Exception) {
-                            logger.error(e) { "callback.done() failed: ${e.message}" }
+                            // 改用 Android 原生 Log 记录，不依赖外部三方库，100% 能够编译
+                            android.util.Log.e("SystemTtsService", "callback.done failed", e)
                         }
                     } else {
-                        // 如果未曾开始就结束了，则以 error 形式正常终止，避免崩溃
+                        // 如果未曾开始就结束了，则以 error 形式正常终止
                         callback.error(TextToSpeech.ERROR_SYNTHESIS)
                     }
                 }?.onFailure {
@@ -411,7 +412,7 @@ class SystemTtsService : TextToSpeechService(), IEventDispatcher {
             mNotificationDisplayed = false
         }
     }
-
+   
     private fun writeToCallBack(
         callback: android.speech.tts.SynthesisCallback,
         pcmData: ByteArray,
